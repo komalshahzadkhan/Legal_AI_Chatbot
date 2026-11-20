@@ -1,162 +1,218 @@
-import io
-import os
-from gtts import gTTS
-from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_community.vectorstores import Chroma
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
 import streamlit as st
+import google.generativeai as genai
+from pypdf import PdfReader
+from gtts import gTTS
+import io
 
-st.set_page_config(page_title="LEGAL AI CASE ASSISTANT", page_icon="⚖️", layout="wide")
-st.caption("Upload court case judgments to generate executive summaries, timelines, legal sections, and multilingual Q&A.")
+# --- PAGE CONFIGURATION ---
+st.set_page_config(
+    page_title="LEXIS AI | Legal Case Assistant",
+    page_icon="⚖️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# API Key from Streamlit Secrets
-os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+# --- CUSTOM HIGH-CLASS STYLING ---
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 2.6rem;
+        font-weight: 800;
+        letter-spacing: 1.5px;
+        color: #FFFFFF;
+        margin-bottom: 0px;
+    }
+    .sub-title {
+        font-size: 1.05rem;
+        color: #A0AEC0;
+        margin-bottom: 25px;
+    }
+    .welcome-box {
+        background-color: #1E212B;
+        padding: 45px;
+        border-radius: 12px;
+        border: 1px solid #2D3748;
+        text-align: center;
+        margin-top: 30px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# --- LEFT SIDEBAR (SETTINGS) ---
-with st.sidebar:
-    st.header("Settings")
-    st.success("API Key Connected (Secure)")
+# --- SECURE BACKEND API CONFIGURATION (HIDDEN FROM UI) ---
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+except Exception:
+    st.error("⚠️ Configuration Error: Please add 'GEMINI_API_KEY' in Streamlit Secrets.")
+    st.stop()
 
-    language = st.selectbox(
-        "Jawab ki Zaban (Language):", ["English", "Urdu", "Roman Urdu"]
-    )
+# --- HELPER FUNCTIONS ---
+def extract_text_from_pdf(pdf_file):
+    reader = PdfReader(pdf_file)
+    text = ""
+    for page in reader.pages:
+        page_text = page.extract_text()
+        if page_text:
+            text += page_text + "\n"
+    return text, len(reader.pages)
 
-    enable_audio = st.checkbox("Enable AI Voice Output (Audio)", value=True)
-
-    uploaded_file = st.file_uploader("Court Case PDF Upload Karein", type="pdf")
-
-
-# Voice Generator Function
-def speak_text(text, lang_choice):
+def generate_audio(text, lang_choice):
     try:
-        lang_code = "ur" if lang_choice == "Urdu" else "en"
-        tts = gTTS(text=text[:600], lang=lang_code)
+        tts_lang = "ur" if lang_choice == "Urdu" else "en"
+        clean_text = text.replace("*", "").replace("#", "")[:1000]
+        tts = gTTS(text=clean_text, lang=tts_lang, slow=False)
         audio_fp = io.BytesIO()
         tts.write_to_fp(audio_fp)
-        st.audio(audio_fp, format="audio/mp3")
+        audio_fp.seek(0)
+        return audio_fp
     except Exception:
-        pass
+        return None
 
-
-# Load & Cache PDF
-@st.cache_resource
-def process_pdf(file_bytes, file_name):
-    if file_bytes is not None:
-        reader = PdfReader(io.BytesIO(file_bytes))
-    else:
-        reader = PdfReader("case.pdf")
-
-    num_pages = len(reader.pages)
-    full_text = "\n".join([page.extract_text() or "" for page in reader.pages])
-    word_count = len(full_text.split())
-
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    chunks = splitter.split_text(full_text)
-
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001"
+# --- SIDEBAR CONFIGURATION ---
+with st.sidebar:
+    st.markdown("## ⚙️ CONFIGURATION")
+    st.divider()
+    
+    output_language = st.selectbox(
+        "Select Output Language",
+        ["English", "Urdu", "Roman Urdu"],
+        index=0
     )
-    vectorstore = Chroma.from_texts(chunks, embeddings)
-    return vectorstore.as_retriever(), num_pages, word_count
+    
+    enable_audio = st.checkbox("Enable AI Voice Output (Audio)", value=False)
+    
+    st.divider()
+    st.markdown("### 📄 DOCUMENT UPLOAD")
+    uploaded_file = st.file_uploader(
+        "Upload Court Case Judgment (PDF)",
+        type=["pdf"],
+        help="Upload a court case PDF to unlock AI analysis tools."
+    )
 
+# --- MAIN HEADER ---
+st.markdown('<p class="main-title">⚖️ LEGAL AI CASE ASSISTANT</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Upload court case judgments to generate executive summaries, timelines, legal sections, and multilingual Q&A.</p>', unsafe_allow_html=True)
 
-file_bytes = uploaded_file.getvalue() if uploaded_file else None
-file_name = uploaded_file.name if uploaded_file else "case.pdf"
+# --- CONDITIONAL DISPLAY: ONLY SHOW TOOLS AFTER PDF UPLOAD ---
+if uploaded_file is not None:
+    if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
+        with st.spinner("Analyzing legal document..."):
+            text, num_pages = extract_text_from_pdf(uploaded_file)
+            st.session_state.pdf_text = text
+            st.session_state.num_pages = num_pages
+            st.session_state.word_count = len(text.split())
+            st.session_state.current_file = uploaded_file.name
+            st.session_state.chat_history = []
+            st.session_state.summary_output = None
+            st.session_state.timeline_output = None
 
-retriever, total_pages, total_words = process_pdf(file_bytes, file_name)
+    # --- DOCUMENT METRICS BAR ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric(label="Total Pages", value=st.session_state.num_pages)
+    with col2:
+        st.metric(label="Total Words", value=f"{st.session_state.word_count:,}")
+    with col3:
+        st.metric(label="Active Output Mode", value=output_language)
 
-# Setup LLM & Chain
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+    st.divider()
 
-prompt = ChatPromptTemplate.from_template(
-    """You are an expert Legal AI Assistant. Answer strictly based on the provided context.
-Respond in {language} language.
+    # --- NAVIGATION TABS ---
+    tab1, tab2, tab3 = st.tabs([
+        "💬 Legal Q&A Chat",
+        "📑 Case Summary & Judgment",
+        "⏳ Timeline & Legal Sections"
+    ])
 
-Context:
-{context}
+    # TAB 1: LEGAL Q&A CHAT
+    with tab1:
+        st.subheader("Interactive Case Q&A")
+        
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
-Question: {input}"""
-)
+        user_question = st.chat_input("Ask a legal question about this case...")
+        if user_question:
+            st.session_state.chat_history.append({"role": "user", "content": user_question})
+            with st.chat_message("user"):
+                st.markdown(user_question)
 
-document_chain = create_stuff_documents_chain(llm, prompt)
-retrieval_chain = create_retrieval_chain(retriever, document_chain)
+            with st.chat_message("assistant"):
+                with st.spinner("Drafting legal response..."):
+                    prompt = f"""
+                    You are an expert Legal AI Assistant. Answer the user's question strictly based on the provided court case text.
+                    Provide the response in {output_language}.
+                    
+                    Court Case Text:
+                    {st.session_state.pdf_text[:25000]}
+                    
+                    User Question: {user_question}
+                    """
+                    response = model.generate_content(prompt)
+                    reply = response.text
+                    st.markdown(reply)
+                    st.session_state.chat_history.append({"role": "assistant", "content": reply})
+                    
+                    if enable_audio:
+                        audio_bytes = generate_audio(reply, output_language)
+                        if audio_bytes:
+                            st.audio(audio_bytes, format="audio/mp3")
 
-# --- MAIN INTERFACE (EXACTLY LIKE YOUR SCREENSHOT) ---
-st.title("Assistant")
-st.caption(
-    "Court case PDF upload karein aur Summary, Timeline, Legal Sections, aur Urdu/English QA hasil karein."
-)
+    # TAB 2: ONE-CLICK CASE SUMMARY & JUDGMENT
+    with tab2:
+        st.subheader("One-Click Case Breakdown")
+        if st.button("Generate Complete Case Summary", type="primary"):
+            with st.spinner("Extracting case details and verdict..."):
+                summary_prompt = f"""
+                Analyze the following legal document and provide a structured breakdown in {output_language} with the following clear headings:
+                1. Case Title & Parties Involved
+                2. Background & Key Facts
+                3. Core Legal Issues
+                4. Arguments Presented
+                5. Final Judgment / Verdict
+                
+                Document Text:
+                {st.session_state.pdf_text[:25000]}
+                """
+                response = model.generate_content(summary_prompt)
+                st.session_state.summary_output = response.text
 
-# 3 Metrics Row
-m1, m2, m3 = st.columns(3)
-m1.metric("Total Pages", total_pages)
-m2.metric("Total Words", total_words)
-m3.metric("Active Mode", language.split()[0])
-
-st.divider()
-
-# 3 Tabs
-tab1, tab2, tab3 = st.tabs([
-    "Legal QA Chat",
-    "Case Summary & Judgment",
-    "Timeline & Legal Sections",
-])
-
-# TAB 1: Legal QA Chat
-with tab1:
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-    user_q = st.chat_input(f"Apna sawal poochein ({language} mein)...")
-    if user_q:
-        st.session_state.messages.append({"role": "user", "content": user_q})
-        with st.chat_message("user"):
-            st.markdown(user_q)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Jawab tayyar ho raha hai..."):
-                res = retrieval_chain.invoke(
-                    {"input": user_q, "language": language}
-                )
-                ans = res["answer"]
-                st.markdown(ans)
-                if enable_audio:
-                    speak_text(ans, language)
-        st.session_state.messages.append({"role": "assistant", "content": ans})
-
-# TAB 2: Case Summary & Judgment
-with tab2:
-    st.subheader("One-Click Case Breakdown")
-    if st.button("Generate Complete Case Summary"):
-        with st.spinner("Case ka mukammal khulasa ban raha hai..."):
-            q = (
-                "Provide a structured Case Breakdown with numbered headings: "
-                "1. Case Title & Parties Involved, 2. Background & Key Facts, "
-                "3. Legal Issues, 4. Final Judgment & Verdict."
-            )
-            res = retrieval_chain.invoke({"input": q, "language": language})
-            st.markdown(res["answer"])
+        if st.session_state.summary_output:
+            st.markdown(st.session_state.summary_output)
             if enable_audio:
-                speak_text(res["answer"], language)
+                audio_bytes = generate_audio(st.session_state.summary_output, output_language)
+                if audio_bytes:
+                    st.audio(audio_bytes, format="audio/mp3")
 
-# TAB 3: Timeline & Legal Sections
-with tab3:
-    st.subheader("Important Dates, Timeline & Legal Sections")
-    if st.button("Extract Timeline & Legal Sections"):
-        with st.spinner("Important information nikali ja rahi hai..."):
-            q = (
-                "Extract a chronological Timeline of Important Dates and list all "
-                "Legal Sections, Acts, and Citations mentioned in this document."
-            )
-            res = retrieval_chain.invoke({"input": q, "language": language})
-            st.markdown(res["answer"])
-            if enable_audio:
-                speak_text(res["answer"], language)
+    # TAB 3: TIMELINE & LEGAL SECTIONS
+    with tab3:
+        st.subheader("Chronological Timeline & Cited Laws")
+        if st.button("Extract Timeline & Legal Sections", type="primary"):
+            with st.spinner("Identifying dates, events, and statutes..."):
+                timeline_prompt = f"""
+                From the provided legal document, extract the following in {output_language}:
+                1. Chronological Timeline of Events (Dates and what happened)
+                2. Cited Legal Sections, Acts, and Precedents
+                
+                Document Text:
+                {st.session_state.pdf_text[:25000]}
+                """
+                response = model.generate_content(timeline_prompt)
+                st.session_state.timeline_output = response.text
+
+        if st.session_state.timeline_output:
+            st.markdown(st.session_state.timeline_output)
+
+else:
+    # --- CLEAN WELCOME SCREEN WHEN NO PDF IS UPLOADED ---
+    st.markdown("""
+        <div class="welcome-box">
+            <h3>👈 Upload a Court Case PDF from the Sidebar to Begin</h3>
+            <p style="color: #A0AEC0; margin-top: 10px;">
+                Once uploaded, you will unlock instant <b>Case Summaries</b>, <b>Legal Sections</b>, 
+                <b>Event Timelines</b>, and <b>Multilingual Q&A</b> in English, Urdu, and Roman Urdu.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
