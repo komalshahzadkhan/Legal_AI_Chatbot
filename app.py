@@ -13,25 +13,22 @@ api_key =st.secrets["GOOGLE_API_KEY"]
 pdf_path = "case.pdf"
 
 #yahn hum pdf se text nikaly gy
-reader = PdfReader(pdf_path)
-raw_text= ""
-for page in reader.pages:
-  raw_text +=page.extract_text() or ""
+@st.cache_resource
+def setup_retriever():
+    reader = PdfReader("case.pdf")
+    text = "".join([page.extract_text() or "" for page in reader.pages])
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=200
+    )
+    chunks = text_splitter.split_text(text)
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/gemini-embedding-001"
+    )
+    vectorstore = Chroma.from_texts(chunks, embeddings)
+    return vectorstore.as_retriever()
 
-#text ko choty hisson main tory gy yani chunk kary gy
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-docs =text_splitter.create_documents([raw_text])
 
-#vector database (Memory) banana
-raw_text =""
-for page in reader.pages:
-  raw_text +=page.extract_text()
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-docs = text_splitter.create_documents([raw_text])
-embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
-vector_store = Chroma.from_documents(docs, embeddings)
-retriever = vector_store.as_retriever(search_kwargs={"k":4})
-
+retriever = setup_retriever()
 
 
 #gemini model aur vector store (memory) Banana
