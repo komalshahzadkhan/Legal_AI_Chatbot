@@ -2,6 +2,9 @@ import os
 from pypdf import PdfReader
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import Chroma
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 api_key =st.secrets["GOOGLE_API_KEY"] 
