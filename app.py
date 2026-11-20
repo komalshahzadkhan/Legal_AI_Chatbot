@@ -25,7 +25,7 @@ for page in reader.pages:
   raw_text +=page.extract_text()
 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 docs = text_splitter.create_documents([raw_text])
-embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2")
+embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 vector_store = Chroma.from_documents(docs, embeddings)
 retriever = vector_store.as_retriever(search_kwargs={"k":4})
 
