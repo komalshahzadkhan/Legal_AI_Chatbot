@@ -4,7 +4,7 @@ import streamlit as st
 api_key =st.secrets["GOOGLE_API_KEY"] 
 
 #yahn pr pdf ka exact name likhna hai
-pdf_path = "v4_issue_1_art5 (1) (1).pdf"
+pdf_path = "v4_issue_1_art5 (1) .pdf"
 
 #yahn hum pdf se text nikaly gy
 reader = PdfReader(pdf_path)
