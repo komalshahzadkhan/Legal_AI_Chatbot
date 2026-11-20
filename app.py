@@ -49,12 +49,43 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 print("Setup mukammal ho gaya hai! koi error nhi aya")
 
-st.title("⚖ Legal AI Chatbot")
-user_question = st.text_input("Ask any question about the case:")
+st.set_page_config(page_title="Legal AI Chatbot", page_icon="⚖️")
+st.title("⚖️ Legal AI Chatbot")
+
+# 1. Language Selector (English, Urdu, Roman Urdu)
+language = st.selectbox(
+    "🌐 Select Response Language:", ["English", "Urdu (اردو)", "Roman Urdu"]
+)
+
+# 2. One-Click Action Buttons
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("📄 Summarize Case"):
+        with st.spinner("Summarizing case..."):
+            query = f"Provide a complete, clear summary of this court case in {language} language."
+            res = retrieval_chain.invoke({"input": query})
+            st.markdown("### 📄 Case Summary")
+            st.write(res["answer"])
+
+with col2:
+    if st.button("⭐ Extract Important Info"):
+        with st.spinner("Extracting key details..."):
+            query = f"Extract all important information (Parties involved, Dates, Case Number, Sections/Laws, and Final Verdict) from this case in {language} language using bullet points."
+            res = retrieval_chain.invoke({"input": query})
+            st.markdown("### ⭐ Key Case Information")
+            st.write(res["answer"])
+
+st.divider()
+
+# 3. Custom Q&A in Selected Language
+user_question = st.text_input(
+    f"💬 Ask any question about the case (Reply will be in {language}):"
+)
 
 if user_question:
-  with st.spinner("Thinking..."):
-    response = retrieval_chain.invoke({"input": user_question})
-    st.write(response["answer"])
-
+    with st.spinner("Searching case records..."):
+        full_query = f"Answer this question strictly based on the case document in {language} language: {user_question}"
+        response = retrieval_chain.invoke({"input": full_query})
+        st.write(response["answer"])
 
