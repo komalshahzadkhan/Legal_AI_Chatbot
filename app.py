@@ -1,4 +1,5 @@
 import os
+from pypdf import PdfReader
 import streamlit as st
 api_key =st.secrets["GOOGLE_API_KEY"] 
 
