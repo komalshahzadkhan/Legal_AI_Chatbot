@@ -14,23 +14,26 @@ st.set_page_config(
 st.markdown("""
     <style>
     .top-badge {
-        font-size: 1.1rem;
-        font-weight: 700;
+        font-size: 2.2rem;
+        font-weight: 800;
         letter-spacing: 3px;
         color: #D4AF37;
         text-transform: uppercase;
-        margin-bottom: -10px;
+        margin-bottom: -12px;
+        line-height: 1.2;
     }
     .main-heading {
-        font-size: 3.1rem;
-        font-weight: 800;
-        letter-spacing: 1px;
+        font-size: 3.3rem;
+        font-weight: 900;
+        letter-spacing: 1.5px;
         color: #FFFFFF;
+        text-transform: uppercase;
         margin-top: 0px;
-        margin-bottom: 5px;
+        margin-bottom: 8px;
+        line-height: 1.1;
     }
     .sub-heading {
-        font-size: 1.05rem;
+        font-size: 1.08rem;
         color: #A0AEC0;
         margin-bottom: 25px;
     }
@@ -76,10 +79,23 @@ def generate_audio(text, lang_choice):
     except Exception:
         return None
 
+# --- AUTOMATIC SECRET KEY CHECK (CLIENT-READY) ---
+secret_key = ""
+try:
+    if "GEMINI_API_KEY" in st.secrets:
+        secret_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    secret_key = ""
+
 with st.sidebar:
     st.markdown("## ⚙️ SETTINGS")
-    api_key = st.text_input("Google Gemini API Key", type="password", placeholder="Enter your API key...")
-    st.divider()
+    
+    if secret_key:
+        api_key = secret_key
+    else:
+        api_key = st.text_input("Google Gemini API Key", type="password", placeholder="Enter your API key...")
+        st.divider()
+        
     output_language = st.selectbox("Response Language", ["English", "Urdu", "Roman Urdu"], index=0)
     enable_audio = st.checkbox("Enable AI Voice Output (Audio)", value=False)
     st.divider()
@@ -90,13 +106,14 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
 
+# --- LARGE CAPITAL TWO-LINE HEADER ---
 st.markdown('<p class="top-badge">⚖️ LEGAL AI</p>', unsafe_allow_html=True)
 st.markdown('<h1 class="main-heading">CASE ASSISTANT</h1>', unsafe_allow_html=True)
 st.markdown('<p class="sub-heading">Upload court case PDFs to generate executive summaries, case timelines, legal sections, and multilingual client Q&A.</p>', unsafe_allow_html=True)
 
 if uploaded_file is not None:
     if not api_key:
-        st.warning("⚠️ Please enter your Google Gemini API Key in the left sidebar to analyze this document.")
+        st.warning("⚠️ Please configure your API Key in Streamlit Secrets or enter it in the sidebar.")
     else:
         if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
             with st.spinner("Processing legal document..."):
