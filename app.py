@@ -10,7 +10,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 import streamlit as st
 
-st.set_page_config(page_title="Legal AI Assistant", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="LEGAL AI CASE ASSISTANT", page_icon="⚖️", layout="wide")
+st.caption("Upload court case judgments to generate executive summaries, timelines, legal sections, and multilingual Q&A."
 
 # API Key from Streamlit Secrets
 os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
