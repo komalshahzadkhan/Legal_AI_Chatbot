@@ -55,6 +55,6 @@ user_question = st.text_input("Ask any question about the case:")
 if user_question:
   with st.spinner("Thinking..."):
     response = retrieval_chain.invoke({"input": user_question})
-    st.write(response["answer"]
+    st.write(response["answer"])
 
 
