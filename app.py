@@ -2,6 +2,7 @@ import os
 from pypdf import PdfReader
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+langchain-text-splitters
 api_key =st.secrets["GOOGLE_API_KEY"] 
 
 #yahn pr pdf ka exact name likhna hai
