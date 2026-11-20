@@ -3,7 +3,7 @@ from pypdf import PdfReader
 import streamlit as st
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 api_key =st.secrets["GOOGLE_API_KEY"] 
 
 #yahn pr pdf ka exact name likhna hai
