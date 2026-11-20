@@ -1,88 +1,161 @@
+import io
 import os
-from pypdf import PdfReader
-import streamlit as st
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from gtts import gTTS
 from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import Chroma
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-api_key =st.secrets["GOOGLE_API_KEY"] 
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
+import streamlit as st
 
-#yahn pr pdf ka exact name likhna hai
-pdf_path = "case.pdf"
+st.set_page_config(page_title="Legal AI Assistant", page_icon="⚖️", layout="wide")
 
-#yahn hum pdf se text nikaly gy
-@st.cache_resource
-def setup_retriever():
-    reader = PdfReader("case.pdf")
-    text = "".join([page.extract_text() or "" for page in reader.pages])
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=200
+# API Key from Streamlit Secrets
+os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+
+# --- LEFT SIDEBAR (SETTINGS) ---
+with st.sidebar:
+    st.header("Settings")
+    st.success("API Key Connected (Secure)")
+
+    language = st.selectbox(
+        "Jawab ki Zaban (Language):", ["English", "Urdu", "Roman Urdu"]
     )
-    chunks = text_splitter.split_text(text)
+
+    enable_audio = st.checkbox("Enable AI Voice Output (Audio)", value=True)
+
+    uploaded_file = st.file_uploader("Court Case PDF Upload Karein", type="pdf")
+
+
+# Voice Generator Function
+def speak_text(text, lang_choice):
+    try:
+        lang_code = "ur" if lang_choice == "Urdu" else "en"
+        tts = gTTS(text=text[:600], lang=lang_code)
+        audio_fp = io.BytesIO()
+        tts.write_to_fp(audio_fp)
+        st.audio(audio_fp, format="audio/mp3")
+    except Exception:
+        pass
+
+
+# Load & Cache PDF
+@st.cache_resource
+def process_pdf(file_bytes, file_name):
+    if file_bytes is not None:
+        reader = PdfReader(io.BytesIO(file_bytes))
+    else:
+        reader = PdfReader("case.pdf")
+
+    num_pages = len(reader.pages)
+    full_text = "\n".join([page.extract_text() or "" for page in reader.pages])
+    word_count = len(full_text.split())
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = splitter.split_text(full_text)
+
     embeddings = GoogleGenerativeAIEmbeddings(
         model="models/gemini-embedding-001"
     )
     vectorstore = Chroma.from_texts(chunks, embeddings)
-    return vectorstore.as_retriever()
+    return vectorstore.as_retriever(), num_pages, word_count
 
 
-retriever = setup_retriever()
+file_bytes = uploaded_file.getvalue() if uploaded_file else None
+file_name = uploaded_file.name if uploaded_file else "case.pdf"
 
+retriever, total_pages, total_words = process_pdf(file_bytes, file_name)
 
-#gemini model aur vector store (memory) Banana
-llm =ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite")
+# Setup LLM & Chain
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
 
-system_prompt =(
-    "You are an expert legal assistant. Use the following pieces of retrieved context to answer"
-    "the question. Answer the user in the language they ask (English, Urdu, or Roman Urdu)"
-    "If the question is in Urdu or Roman Urdu, translate the complex legal terms into simple language so anyone can understand.\n\n"
-    "{context}"
-)
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    ("human", "{input}"),
-])
-print("Setup mukammal ho gaya hai! koi error nhi aya")
+prompt = ChatPromptTemplate.from_template(
+    """You are an expert Legal AI Assistant. Answer strictly based on the provided context.
+Respond in {language} language.
 
-st.set_page_config(page_title="Legal AI Chatbot", page_icon="⚖️")
-st.title("⚖️ Legal AI Chatbot")
+Context:
+{context}
 
-# 1. Language Selector (English, Urdu, Roman Urdu)
-language = st.selectbox(
-    "🌐 Select Response Language:", ["English", "Urdu (اردو)", "Roman Urdu"]
+Question: {input}"""
 )
 
-# 2. One-Click Action Buttons
-col1, col2 = st.columns(2)
+document_chain = create_stuff_documents_chain(llm, prompt)
+retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-with col1:
-    if st.button("📄 Summarize Case"):
-        with st.spinner("Summarizing case..."):
-            query = f"Provide a complete, clear summary of this court case in {language} language."
-            res = retrieval_chain.invoke({"input": query})
-            st.markdown("### 📄 Case Summary")
-            st.write(res["answer"])
+# --- MAIN INTERFACE (EXACTLY LIKE YOUR SCREENSHOT) ---
+st.title("Assistant")
+st.caption(
+    "Court case PDF upload karein aur Summary, Timeline, Legal Sections, aur Urdu/English QA hasil karein."
+)
 
-with col2:
-    if st.button("⭐ Extract Important Info"):
-        with st.spinner("Extracting key details..."):
-            query = f"Extract all important information (Parties involved, Dates, Case Number, Sections/Laws, and Final Verdict) from this case in {language} language using bullet points."
-            res = retrieval_chain.invoke({"input": query})
-            st.markdown("### ⭐ Key Case Information")
-            st.write(res["answer"])
+# 3 Metrics Row
+m1, m2, m3 = st.columns(3)
+m1.metric("Total Pages", total_pages)
+m2.metric("Total Words", total_words)
+m3.metric("Active Mode", language.split()[0])
 
 st.divider()
 
-# 3. Custom Q&A in Selected Language
-user_question = st.text_input(
-    f"💬 Ask any question about the case (Reply will be in {language}):"
-)
+# 3 Tabs
+tab1, tab2, tab3 = st.tabs([
+    "Legal QA Chat",
+    "Case Summary & Judgment",
+    "Timeline & Legal Sections",
+])
 
-if user_question:
-    with st.spinner("Searching case records..."):
-        full_query = f"Answer this question strictly based on the case document in {language} language: {user_question}"
-        response = retrieval_chain.invoke({"input": full_query})
-        st.write(response["answer"])
+# TAB 1: Legal QA Chat
+with tab1:
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    user_q = st.chat_input(f"Apna sawal poochein ({language} mein)...")
+    if user_q:
+        st.session_state.messages.append({"role": "user", "content": user_q})
+        with st.chat_message("user"):
+            st.markdown(user_q)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Jawab tayyar ho raha hai..."):
+                res = retrieval_chain.invoke(
+                    {"input": user_q, "language": language}
+                )
+                ans = res["answer"]
+                st.markdown(ans)
+                if enable_audio:
+                    speak_text(ans, language)
+        st.session_state.messages.append({"role": "assistant", "content": ans})
+
+# TAB 2: Case Summary & Judgment
+with tab2:
+    st.subheader("One-Click Case Breakdown")
+    if st.button("Generate Complete Case Summary"):
+        with st.spinner("Case ka mukammal khulasa ban raha hai..."):
+            q = (
+                "Provide a structured Case Breakdown with numbered headings: "
+                "1. Case Title & Parties Involved, 2. Background & Key Facts, "
+                "3. Legal Issues, 4. Final Judgment & Verdict."
+            )
+            res = retrieval_chain.invoke({"input": q, "language": language})
+            st.markdown(res["answer"])
+            if enable_audio:
+                speak_text(res["answer"], language)
+
+# TAB 3: Timeline & Legal Sections
+with tab3:
+    st.subheader("Important Dates, Timeline & Legal Sections")
+    if st.button("Extract Timeline & Legal Sections"):
+        with st.spinner("Important information nikali ja rahi hai..."):
+            q = (
+                "Extract a chronological Timeline of Important Dates and list all "
+                "Legal Sections, Acts, and Citations mentioned in this document."
+            )
+            res = retrieval_chain.invoke({"input": q, "language": language})
+            st.markdown(res["answer"])
+            if enable_audio:
+                speak_text(res["answer"], language)
