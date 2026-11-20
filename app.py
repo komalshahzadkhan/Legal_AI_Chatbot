@@ -7,7 +7,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 api_key =st.secrets["GOOGLE_API_KEY"] 
 
 #yahn pr pdf ka exact name likhna hai
-pdf_path = "case .pdf"
+pdf_path = "case.pdf"
 
 #yahn hum pdf se text nikaly gy
 reader = PdfReader(pdf_path)
