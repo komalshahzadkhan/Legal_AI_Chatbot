@@ -1,5 +1,6 @@
 streamlit
-pypdf
 google-genai
-pymupdf
+pypdf
 langchain
+langchain-text-splitters
+faiss-cpu
