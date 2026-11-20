@@ -13,24 +13,26 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .top-badge {
-        font-size: 2.2rem;
-        font-weight: 800;
-        letter-spacing: 3px;
-        color: #D4AF37;
-        text-transform: uppercase;
-        margin-bottom: -12px;
-        line-height: 1.2;
+    .brand-title {
+        font-size: 2.8rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 3px !important;
+        color: #D4AF37 !important;
+        text-transform: uppercase !important;
+        margin-bottom: 0px !important;
+        padding-bottom: 0px !important;
+        line-height: 1.1 !important;
     }
     .main-heading {
-        font-size: 3.3rem;
-        font-weight: 900;
-        letter-spacing: 1.5px;
-        color: #FFFFFF;
-        text-transform: uppercase;
-        margin-top: 0px;
-        margin-bottom: 8px;
-        line-height: 1.1;
+        font-size: 3.2rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 1.5px !important;
+        color: #FFFFFF !important;
+        text-transform: uppercase !important;
+        margin-top: 0px !important;
+        padding-top: 0px !important;
+        margin-bottom: 10px !important;
+        line-height: 1.1 !important;
     }
     .sub-heading {
         font-size: 1.08rem;
@@ -79,23 +81,22 @@ def generate_audio(text, lang_choice):
     except Exception:
         return None
 
-# --- AUTOMATIC SECRET KEY CHECK (CLIENT-READY) ---
-secret_key = ""
+# --- AUTOMATICALLY DETECT API KEY FROM SECRETS (NO SIDEBAR BOX FOR CLIENTS) ---
+api_key = ""
 try:
-    if "GEMINI_API_KEY" in st.secrets:
-        secret_key = st.secrets["GEMINI_API_KEY"]
+    for key_name in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "API_KEY", "gemini_api_key"]:
+        if key_name in st.secrets:
+            api_key = st.secrets[key_name]
+            break
+    if not api_key and len(st.secrets) > 0:
+        first_key = list(st.secrets.keys())[0]
+        api_key = st.secrets[first_key]
 except Exception:
-    secret_key = ""
+    api_key = ""
 
 with st.sidebar:
     st.markdown("## ⚙️ SETTINGS")
-    
-    if secret_key:
-        api_key = secret_key
-    else:
-        api_key = st.text_input("Google Gemini API Key", type="password", placeholder="Enter your API key...")
-        st.divider()
-        
+    st.divider()
     output_language = st.selectbox("Response Language", ["English", "Urdu", "Roman Urdu"], index=0)
     enable_audio = st.checkbox("Enable AI Voice Output (Audio)", value=False)
     st.divider()
@@ -106,14 +107,14 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
 
-# --- LARGE CAPITAL TWO-LINE HEADER ---
-st.markdown('<p class="top-badge">⚖️ LEGAL AI</p>', unsafe_allow_html=True)
-st.markdown('<h1 class="main-heading">CASE ASSISTANT</h1>', unsafe_allow_html=True)
+# --- EXTRA LARGE TWO-LINE CAPITAL HEADER ---
+st.markdown('<div class="brand-title">⚖️ LEGAL AI</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-heading">CASE ASSISTANT</div>', unsafe_allow_html=True)
 st.markdown('<p class="sub-heading">Upload court case PDFs to generate executive summaries, case timelines, legal sections, and multilingual client Q&A.</p>', unsafe_allow_html=True)
 
 if uploaded_file is not None:
     if not api_key:
-        st.warning("⚠️ Please configure your API Key in Streamlit Secrets or enter it in the sidebar.")
+        st.error("⚠️ Backend API Key not found. Please check your Streamlit Secrets configuration.")
     else:
         if "current_file" not in st.session_state or st.session_state.current_file != uploaded_file.name:
             with st.spinner("Processing legal document..."):
