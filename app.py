@@ -3,6 +3,10 @@ import google.generativeai as genai
 from pypdf import PdfReader
 from gtts import gTTS
 import io
+import time
+
+def split_into_chunks(text, chunk_size=5000):
+  return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
 st.set_page_config(
     page_title="LEGAL AI | Case Assistant",
@@ -174,13 +178,7 @@ if uploaded_file is not None:
                     summary_prompt = f"Analyze the legal document and create a client-friendly breakdown in {output_language} with these headings:\n1. Case Title & Parties Involved\n2. Executive Summary (Plain & Easy Explanation)\n3. Key Facts & Background\n4. Core Legal Issues\n5. Arguments Presented\n6. Final Judgment / Court Verdict\n7. Key Takeaways for the Client\n\nDocument Text:\n{st.session_state.pdf_text[:28000]}"
                     response = model.generate_content(summary_prompt)
                     st.session_state.summary_output = response.text
-                    
-import time
 
-
-def split_into_chunks(text, chunk_size=5000):
-  return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
-           
             
             if st.session_state.summary_output:
                 st.markdown(st.session_state.summary_output)
