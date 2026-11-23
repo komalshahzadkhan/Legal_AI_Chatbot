@@ -105,7 +105,7 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-3.5-flash")
 
 # --- EXTRA LARGE TWO-LINE CAPITAL HEADER ---
 st.markdown('<div class="brand-title">⚖️ LEGAL AI</div>', unsafe_allow_html=True)
